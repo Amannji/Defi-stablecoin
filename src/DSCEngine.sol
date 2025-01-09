@@ -98,6 +98,7 @@ contract DSCEngine is ReentrancyGuard {
     //////////////////////////
 
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount );
+    event CollateralRedeemed(address indexed user, address indexed token, uint256 indexed amount);
 
 
     ///////////////// 
@@ -169,13 +170,30 @@ constructor(address[] memory tokenAddresses, address[] memory priceFeedAddresses
         }
     }
 
-    function depositCollateralAndMintDSC() public {
+    function depositCollateralAndMintDSC(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDscToMint) public {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintDSC(amountDscToMint);
 
     }
 
-    function redeemCollateralForDSC() public{
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) public moreThanZero(amountCollateral){
+        s_collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
 
+        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
+        if(!success){
+            revert DSCEngine_TransferFailed();
+        }
+        
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
+
+    function redeemCollateralForDSC(address tokenCollateralAddress, uint256 amountToBurn) public moreThanZero(amountToBurn) nonReentrant{
+        burnDSC(amountToBurn);
+        redeemCollateral(tokenCollateralAddress, amountToBurn);
+    }
+
+
 
     /*
     * @param amountDSCToMint: The amount of DSC your want to mint
@@ -190,9 +208,18 @@ constructor(address[] memory tokenAddresses, address[] memory priceFeedAddresses
         }
     }
 
-    function burnDSC() public{
+    function burnDSC(uint256 amount) public moreThanZero(amount){
+        s_DSCMinted[msg.sender] -= amount;
+        bool success = i_dsc.transferFrom(msg.sender, address(this), amount);
+        if(!success){
+            revert DSCEngine_TransferFailed();
+        }
 
+        i_dsc.burn(amount);
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
+
+    
 
     function liquidate() public {
            
