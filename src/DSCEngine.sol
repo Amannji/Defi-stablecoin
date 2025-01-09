@@ -57,7 +57,7 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine_TokenNotAllowed();
     error DSCEngine_TransferFailed();
     error DSCEngine_BreaksHealthFactor(uint256 healthFactor);
-
+    error DSCEngine_MintFailed();
     ///////////////// 
     /// Modifier /// 
     ////////////////
@@ -183,6 +183,11 @@ constructor(address[] memory tokenAddresses, address[] memory priceFeedAddresses
     */
     function mintDSC(uint256 amountDSCToMint) public moreThanZero(amountDSCToMint) nonReentrant{
         s_DSCMinted[msg.sender] += amountDSCToMint;
+        _revertIfHealthFactorIsBroken(msg.sender);
+        bool minted = i_dsc.mint(msg.sender, amountDSCToMint);
+        if(!minted){
+            revert DSCEngine_MintFailed();
+        }
     }
 
     function burnDSC() public{
